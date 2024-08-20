@@ -1,0 +1,8 @@
+flask
+pandas
+requests
+anthropic
+python-dotenv
+Flask-Session
+sendgrid
+

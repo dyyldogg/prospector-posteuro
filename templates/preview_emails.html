@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview All Emails</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-center">Preview All Emails</h1>
+        {% for email in emails %}
+            <div class="bg-white shadow-md rounded-lg p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-2">To: {{ email.to }}</h2>
+                <h3 class="text-lg font-medium mb-2">Subject: 
+                    <input type="text" class="w-full p-2 border rounded" value="{{ email.subject }}" onchange="updateEmail({{ loop.index0 }}, 'subject', this.value)">
+                </h3>
+                <textarea class="w-full h-64 p-2 border rounded mb-2" onchange="updateEmail({{ loop.index0 }}, 'body', this.value)">{{ email.body.split('\n\nBest,')[0] }}</textarea>
+                <div class="text-sm text-gray-600 mt-2 p-2 bg-gray-100 rounded">
+                    {{ email.body.split('\n\nBest,')[1] }}
+                </div>
+            </div>
+        {% endfor %}
+        <button id="save-all-emails" class="mt-6 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-200">Save All Emails</button>
+    </div>
+    <script>
+        function updateEmail(index, field, value) {
+            fetch('/update_email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({index: index, field: field, value: value}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Failed to update email. Please try again.');
+                }
+            });
+        }
+
+        document.getElementById('save-all-emails').addEventListener('click', function() {
+            fetch('/save_all_emails', {
+                method: 'POST',
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('All emails saved successfully!');
+                } else {
+                    alert('Failed to save emails. Please try again.');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

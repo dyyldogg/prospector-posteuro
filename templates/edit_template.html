@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Email Template</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white shadow-xl rounded-lg p-8 max-w-2xl w-full">
+        <h1 class="text-3xl font-bold mb-6 text-center text-gray-800">Edit Email Template</h1>
+        <div class="mb-4">
+            <label for="email-subject" class="block text-sm font-medium text-gray-700 mb-2">Subject:</label>
+            <input type="text" id="email-subject" class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" value="{{ subject }}">
+        </div>
+        <div class="mb-6">
+            <label for="email-body" class="block text-sm font-medium text-gray-700 mb-2">Body:</label>
+            <textarea id="email-body" class="w-full h-64 p-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">{{ body }}</textarea>
+        </div>
+        <div class="mb-6">
+            <label for="email-footer" class="block text-sm font-medium text-gray-700 mb-2">Footer:</label>
+            <textarea id="email-footer" class="w-full h-32 p-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">{{ footer }}</textarea>
+        </div>
+        <div class="flex justify-center">
+            <button id="save-and-proceed" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">Save Template and Proceed</button>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('save-and-proceed').addEventListener('click', function() {
+                const subject = document.getElementById('email-subject').value;
+                const body = document.getElementById('email-body').value;
+                const footer = document.getElementById('email-footer').value;
+                fetch('/save_template_and_proceed', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({subject: subject, body: body, footer: footer}),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = '/preview_all_emails';
+                    } else {
+                        alert('An error occurred. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred. Please try again.');
+                });
+            });
+        });
+    </script>
+</body>
+</html>

@@ -20,7 +20,6 @@ Session(app)
 logging.basicConfig(level=logging.INFO)
 
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-
 if not ANTHROPIC_API_KEY:
     raise ValueError("ANTHROPIC_API_KEY is not set in the environment variables")
 
@@ -33,16 +32,14 @@ def analyze_csv(csv_content):
     csv_reader = csv.DictReader(io.StringIO(csv_content))
     rows = list(csv_reader)
     total_entries = len(rows)
-    
     email_count = 0
     phone_count = 0
     both_count = 0
     neither_count = 0
-    
+
     for row in rows:
         has_email = bool(row.get('Email', '').strip())
         has_phone = bool(row.get('Phone', '').strip())
-        
         if has_email and has_phone:
             both_count += 1
         elif has_email:
@@ -79,7 +76,6 @@ def upload_file():
     try:
         csv_content = file.read().decode('utf-8')
         print(f"Debug - CSV content (first 100 chars): {csv_content[:100]}")
-        
         analysis = analyze_csv(csv_content)
         print(f"Debug - CSV analysis result: {analysis}")
 
@@ -96,7 +92,6 @@ def upload_file():
         session['csv_content'] = csv_content
         session['workflow_step'] = 0
         session['user_responses'] = {}
-        
         session.modified = True
 
         print("Debug - Session data after setting:")
@@ -108,6 +103,50 @@ def upload_file():
     except Exception as e:
         print(f"Debug - Error in upload_file: {str(e)}")
         return jsonify({'error': f'Error processing file: {str(e)}'})
+
+def chat_with_claude(user_message, context):
+    system_prompt = """
+    You are an AI assistant specialized in helping real estate agents craft cold emails to potential clients. Your emails must feel personal and human, as if written by the agent themselves. Each email must reflect the agent's unique voice and style, while addressing the specific homeowner in a casual and approachable tone.
+
+    When writing emails, always incorporate the following guidelines:
+    1. Personalization: Leverage any available data from the CSV file (such as the homeowner's name, property details, and address). Make the email feel personalized, addressing the homeowner by their first name and referencing their specific property.
+    2. Property Address: When mentioning the homeowner's property, casually reference the street number and name, without sounding too formal or intrusive.
+    3. Pain Points: Identify potential pain points or challenges relevant to the specific homeowner.
+    4. Agent's Introduction: Introduce the real estate agent briefly in one sentence, mentioning their experience or specialization.
+    5. Solution Offering: Describe the agent's offering in one sentence, clearly stating how the agent can help.
+    6. Call to Action: End the email with a light, non-pressuring call to action.
+    7. Structure: Each email must follow this structure:
+       - Subject Line: Write a subject line that sounds human, friendly, and less sales-y.
+       - Body of Email: The email should be a short paragraph that gets straight to the point.
+
+    Remember:
+    - Be respectful of the homeowner's time.
+    - Avoid sounding too salesy or formal.
+    - Keep the tone friendly, professional, and approachable.
+    - Make it clear how the agent can help them with their specific property situation.
+    """
+
+    full_prompt = f"{context}\n\nUser: {user_message}"
+
+    try:
+        response = anthropic_client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=1000,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": full_prompt}
+            ]
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"Error details: {str(e)}")
+        return f"Error communicating with Claude API: {str(e)}"
+
+def extract_subject_and_body(message):
+    lines = message.split('\n')
+    subject = lines[0].replace('Subject:', '').strip()
+    body = '\n'.join(lines[1:]).strip()
+    return subject, body
 
 @app.route('/chatbot')
 def chatbot():
@@ -122,7 +161,7 @@ def edit_template():
     subject = session.get('email_subject', '')
     body = session.get('email_body', '')
     agent_info = session.get('agent_info', {})
-    
+
     footer = f"""Best,
 
 {agent_info.get('name', '')}
@@ -141,7 +180,6 @@ def format_phone_number(phone):
     phone = ''.join(filter(str.isdigit, phone))
     if len(phone) == 10:
         return f"({phone[:3]}) {phone[3:6]}-{phone[6:]}"
-    return phone
 
 @app.route('/save_template_and_proceed', methods=['POST'])
 def save_template_and_proceed():
@@ -150,10 +188,10 @@ def save_template_and_proceed():
     session['email_body'] = data.get('body', '')
     session['email_footer'] = data.get('footer', '')
     session.modified = True
-    
+
     personalized_emails = generate_personalized_emails(data.get('subject', ''), data.get('body', ''))
     session['personalized_emails'] = personalized_emails
-    
+
     return jsonify({'success': True})
 
 def generate_personalized_emails(template_subject, template_body):
@@ -161,22 +199,22 @@ def generate_personalized_emails(template_subject, template_body):
     csv_reader = csv.DictReader(io.StringIO(csv_content))
     personalized_emails = []
     footer = session.get('email_footer', '')
-    
+
     for row in csv_reader:
         if row.get('Email'):
             context = f"""
-            You are an AI assistant tasked with personalizing email templates for real estate agents. 
+            You are an AI assistant tasked with personalizing email templates for real estate agents.
             Your job is to take the given email template and personalize it for each lead in the CSV file.
-            
+
             CSV Entry:
             {json.dumps(row)}
-            
+
             Email Template Subject:
             {template_subject}
-            
+
             Email Template Body:
             {template_body}
-            
+
             Instructions:
             1. Use the template as the primary structure for the email.
             2. Maintain the overall tone, style, and message of the original template.
@@ -200,7 +238,7 @@ def generate_personalized_emails(template_subject, template_body):
                 'subject': subject,
                 'body': body
             })
-    
+
     return personalized_emails
 
 @app.route('/chat', methods=['POST'])
@@ -211,13 +249,13 @@ def chat():
     csv_analysis = session.get('csv_analysis', {})
     workflow_step = session.get('workflow_step', 0)
     user_responses = session.get('user_responses', {})
-    
+
     print(f"Debug - Session data in chat function:")
     print(f"agent_info: {agent_info}")
     print(f"csv_analysis: {csv_analysis}")
     print(f"workflow_step: {workflow_step}")
     print(f"user_responses: {user_responses}")
-    
+
     if workflow_step == 0:
         try:
             intro_message = f"""Hello! I'm Prospector AI, here to help you craft effective cold emails.
@@ -244,20 +282,20 @@ Can you provide more information about who these leads on the CSV file are, e.g.
         session['workflow_step'] = 2
         session.modified = True
         return jsonify({'responses': [next_question], 'show_proceed': False})
-    
+
     elif workflow_step == 2:
         user_responses['message_theme'] = user_message
         next_question = "Would you like to provide any more information about yourself that would be relevant to the message, e.g. that you have been working in this neighborhood for a long time, you specialize in pre-foreclosure cases, etc?"
         session['workflow_step'] = 3
         session.modified = True
         return jsonify({'responses': [next_question], 'show_proceed': False})
-    
+
     elif workflow_step == 3:
         user_responses['agent_info'] = user_message
         session['user_responses'] = user_responses
-        
+
         first_contact = csv_analysis['first_contact']
-        
+
         context = f"""
         Lead information: {user_responses['lead_info']}
         Message theme: {user_responses['message_theme']}
@@ -273,11 +311,11 @@ Can you provide more information about who these leads on the CSV file are, e.g.
 
         Please create an email template using the provided information. Make sure to reference the first lead's details (name, address, etc.) in the email. The email should be personalized, addressing the homeowner by their first name and mentioning their specific property address. Remember to abbreviate the address to sound more casual. Keep the tone casual and human-like.
         """
-        
+
         email_template = chat_with_claude("Please write an email template based on the provided information, ensuring to reference the first lead's details.", context)
-        
+
         subject, body = extract_subject_and_body(email_template)
-        
+
         response = f"""Here's a template based on the first contact in your CSV file:
 
 Subject: {subject}
@@ -285,13 +323,13 @@ Subject: {subject}
 {body}
 
 To refine this template, simply continue our conversation. When you're satisfied, click the green 'Proceed' button below to move to the editing page, where you can make final adjustments before sending personalized emails to your entire lead list."""
-        
+
         session['email_subject'] = subject
         session['email_body'] = body
         session['workflow_step'] = 4
         session.modified = True
         return jsonify({'responses': [response], 'show_proceed': True})
-    
+
     else:
         first_contact = csv_analysis['first_contact']
         context = f"""
@@ -310,11 +348,11 @@ To refine this template, simply continue our conversation. When you're satisfied
 
         Please refine the email template based on the user's feedback. Ensure that the first lead's details are still correctly referenced in the email. Remember to only use the street number and name when referring to the address, and keep the tone casual and human-like.
         """
-        
+
         email_template = chat_with_claude(user_message, context)
-        
+
         subject, body = extract_subject_and_body(email_template)
-        
+
         response = f"""Here's your revised template:
 
 Subject: {subject}
@@ -322,7 +360,7 @@ Subject: {subject}
 {body}
 
 If you'd like to make more changes, just let me know. When you're ready to finalize and personalize this template for each lead, click the green 'Proceed' button below."""
-        
+
         session['email_subject'] = subject
         session['email_body'] = body
         session.modified = True
@@ -333,20 +371,20 @@ def save_template():
     logging.info("save_template route called")
     data = request.get_json()
     last_message = data.get('last_message', '')
-    
+
     logging.info(f"Received last_message: {last_message}")
-    
+
     subject, body = extract_subject_and_body(last_message)
-    
+
     logging.info(f"Extracted subject: {subject}")
     logging.info(f"Extracted body: {body}")
-    
+
     session['email_subject'] = subject
     session['email_body'] = body
     session.modified = True
-    
+
     logging.info(f"Session after saving: email_subject: {session.get('email_subject')}, email_body: {session.get('email_body')}")
-    
+
     return jsonify({'success': True, 'message': 'Template saved successfully'})
 
 @app.route('/preview_all_emails')
@@ -362,7 +400,7 @@ def update_email():
     index = data.get('index')
     field = data.get('field')
     value = data.get('value')
-    
+
     personalized_emails = session.get('personalized_emails', [])
     if 0 <= index < len(personalized_emails):
         personalized_emails[index][field] = value

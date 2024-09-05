@@ -65,27 +65,28 @@ document.addEventListener('DOMContentLoaded', function() {
  }
 
  function handleProceed() {
-     const lastMessage = chatMessages.lastElementChild.textContent;
-     fetch('/save_template', {
-         method: 'POST',
-         headers: {
-             'Content-Type': 'application/json',
-         },
-         body: JSON.stringify({last_message: lastMessage}),
-     })
-     .then(response => response.json())
-     .then(data => {
-         if (data.success) {
-             window.location.href = '/edit_template';
-         } else {
-             appendMessage('bot', 'An error occurred while saving the template. Please try again.');
-         }
-     })
-     .catch(error => {
-         console.error('Error:', error);
-         appendMessage('bot', 'An error occurred while saving the template. Please try again.');
-     });
- }
+    const lastMessage = chatMessages.lastElementChild.textContent;
+    fetch('/save_template', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({last_message: lastMessage}),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = '/edit_template';
+        } else {
+            appendMessage('bot', 'An error occurred while saving the template. Please try again.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        appendMessage('bot', 'An error occurred while saving the template. Please try again.');
+    });
+}
+
 
  // Initial message from the bot
  sendMessage('start');

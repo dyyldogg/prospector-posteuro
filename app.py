@@ -181,24 +181,67 @@ def format_phone_number(phone):
     if len(phone) == 10:
         return f"({phone[:3]}) {phone[3:6]}-{phone[6:]}"
 
-@app.route('/save_template_and_proceed', methods=['POST'])
-def save_template_and_proceed():
+@app.route('/save_template', methods=['POST'])
+def save_template():
+    logging.info("save_template route called")
     data = request.get_json()
-    session['email_subject'] = data.get('subject', '')
-    session['email_body'] = data.get('body', '')
-    session['email_footer'] = data.get('footer', '')
+    last_message = data.get('last_message', '')
+
+    logging.info(f"Received last_message: {last_message}")
+
+    # Use Claude API to extract subject and body
+    subject, body = extract_subject_and_body_with_claude(last_message)
+
+    logging.info(f"Extracted subject: {subject}")
+    logging.info(f"Extracted body: {body}")
+
+    session['email_subject'] = subject
+    session['email_body'] = body
     session.modified = True
 
-    personalized_emails = generate_personalized_emails(data.get('subject', ''), data.get('body', ''))
-    session['personalized_emails'] = personalized_emails
+    logging.info(f"Session after saving: email_subject: {session.get('email_subject')}, email_body: {session.get('email_body')}")
 
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'message': 'Template saved successfully'})
+
+def extract_subject_and_body_with_claude(last_message):
+    system_prompt = """
+    You are an AI assistant tasked with extracting the subject line and body of an email from a larger message. The message contains instructions, context, and the email itself. Your job is to identify and extract ONLY the subject line and the body of the email.
+
+    Rules:
+    1. Extract ONLY the subject line and body of the email. Do not include "Subject:" in the extracted text for the subject line.
+    2. Do not include any other parts of the message, such as instructions or context.
+    3. The subject line typically starts with "Subject:" and is on its own line.
+    4. The body of the email is everything that follows the subject line, up until any closing remarks or signatures.
+    5. Do not include any closing remarks, signatures, or footer information in the body.
+    6. Never include the word "Subject:" or "Body:" any other instructions in the extracted text.
+
+    Please respond with the extracted subject line and body, separated by '---'.
+    """
+
+    try:
+        response = anthropic_client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=1000,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": last_message}
+            ]
+        )
+        extracted_text = response.content[0].text.strip()
+        subject, body = extracted_text.split('---')
+        return subject.strip(), body.strip()
+    except Exception as e:
+        logging.error(f"Error in extract_subject_and_body_with_claude: {str(e)}")
+        return "", ""
+    
 
 def generate_personalized_emails(template_subject, template_body):
     csv_content = session.get('csv_content', '')
     csv_reader = csv.DictReader(io.StringIO(csv_content))
     personalized_emails = []
     footer = session.get('email_footer', '')
+    user_responses = session.get('user_responses', {})
+    agent_info = session.get('agent_info', {})
 
     for row in csv_reader:
         if row.get('Email'):
@@ -215,15 +258,22 @@ def generate_personalized_emails(template_subject, template_body):
             Email Template Body:
             {template_body}
 
+            User's original request:
+            Lead information: {user_responses.get('lead_info', '')}
+            Message theme: {user_responses.get('message_theme', '')}
+            Agent information: {user_responses.get('agent_info', '')}
+
+            Agent Info:
+            {json.dumps(agent_info)}
+
             Instructions:
-            1. Use the template as the primary structure for the email.
-            2. Maintain the overall tone, style, and message of the original template.
-            3. Only change specific details that need personalization (e.g., name, address).
-            4. Keep the same paragraph structure and length as the original template.
-            5. Ensure the personalized email reads naturally and doesn't feel forced.
-            6. Do not add any new information or sections that weren't in the original template.
-            7. NEVER EVER include any kind of signature, footer, or closing remarks. The email should end abruptly without any closing.
-            8. Output only the personalized subject and body, no other text.
+            1. Stay very close to the format and content of the template.
+            2. Only make changes to personalize the email for the specific lead.
+            3. Use the lead's information from the CSV entry to personalize the email.
+            4. Keep the same tone, style, and overall message as the original template.
+            5. Do not add any new sections or significantly alter the structure of the email.
+            6. Ensure the personalized email reads naturally and doesn't feel forced.
+            7. Do not include any signature or footer information.
 
             Format your response as follows:
             Subject: [Personalized subject]
@@ -240,6 +290,7 @@ def generate_personalized_emails(template_subject, template_body):
             })
 
     return personalized_emails
+
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -366,26 +417,20 @@ If you'd like to make more changes, just let me know. When you're ready to final
         session.modified = True
         return jsonify({'responses': [response], 'show_proceed': True})
 
-@app.route('/save_template', methods=['POST'])
-def save_template():
-    logging.info("save_template route called")
+
+@app.route('/save_template_and_proceed', methods=['POST'])
+def save_template_and_proceed():
     data = request.get_json()
-    last_message = data.get('last_message', '')
-
-    logging.info(f"Received last_message: {last_message}")
-
-    subject, body = extract_subject_and_body(last_message)
-
-    logging.info(f"Extracted subject: {subject}")
-    logging.info(f"Extracted body: {body}")
-
-    session['email_subject'] = subject
-    session['email_body'] = body
+    session['email_subject'] = data.get('subject', '')
+    session['email_body'] = data.get('body', '')
+    session['email_footer'] = data.get('footer', '')
     session.modified = True
 
-    logging.info(f"Session after saving: email_subject: {session.get('email_subject')}, email_body: {session.get('email_body')}")
+    # Generate personalized emails
+    personalized_emails = generate_personalized_emails(session['email_subject'], session['email_body'])
+    session['personalized_emails'] = personalized_emails
 
-    return jsonify({'success': True, 'message': 'Template saved successfully'})
+    return jsonify({'success': True})
 
 @app.route('/preview_all_emails')
 def preview_all_emails():
